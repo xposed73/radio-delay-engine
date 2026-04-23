@@ -1,0 +1,148 @@
+{
+  "streams": [
+    {
+      "id": "00",
+      "label": "UTC+10:00 Eastern Australia (Sydney)",
+      "mp3": "/utc_plus_10_australia_sydney.mp3",
+      "aac": "/utc_plus_10_australia_sydney.aac"
+    },
+    {
+      "id": "01",
+      "label": "UTC+11:00 Solomon Islands / New Caledonia",
+      "mp3": "/utc_plus_11_solomon_newcaledonia.mp3",
+      "aac": "/utc_plus_11_solomon_newcaledonia.aac"
+    },
+    {
+      "id": "02",
+      "label": "UTC−12:00 New Zealand / Fiji",
+      "mp3": "/utc_minus_12_newzealand_fiji.mp3",
+      "aac": "/utc_minus_12_newzealand_fiji.aac"
+    },
+    {
+      "id": "03",
+      "label": "UTC−11:00 Tonga / Samoa",
+      "mp3": "/utc_minus_11_tonga_samoa.mp3",
+      "aac": "/utc_minus_11_tonga_samoa.aac"
+    },
+    {
+      "id": "04",
+      "label": "UTC−10:00 Hawaii / French Polynesia",
+      "mp3": "/utc_minus_10_hawaii_polynesia.mp3",
+      "aac": "/utc_minus_10_hawaii_polynesia.aac"
+    },
+    {
+      "id": "05",
+      "label": "UTC−09:00 Alaska",
+      "mp3": "/utc_minus_09_alaska.mp3",
+      "aac": "/utc_minus_09_alaska.aac"
+    },
+    {
+      "id": "06",
+      "label": "UTC−08:00 US Pacific Time (California)",
+      "mp3": "/utc_minus_08_us_pacific.mp3",
+      "aac": "/utc_minus_08_us_pacific.aac"
+    },
+    {
+      "id": "07",
+      "label": "UTC−07:00 US Mountain Time (Arizona)",
+      "mp3": "/utc_minus_07_us_mountain.mp3",
+      "aac": "/utc_minus_07_us_mountain.aac"
+    },
+    {
+      "id": "08",
+      "label": "UTC−06:00 US Central Time",
+      "mp3": "/utc_minus_06_us_central.mp3",
+      "aac": "/utc_minus_06_us_central.aac"
+    },
+    {
+      "id": "09",
+      "label": "UTC−05:00 US Eastern Time",
+      "mp3": "/utc_minus_05_us_eastern.mp3",
+      "aac": "/utc_minus_05_us_eastern.aac"
+    },
+    {
+      "id": "10",
+      "label": "UTC−04:00 Chile / Caribbean islands",
+      "mp3": "/utc_minus_04_caribbean.mp3",
+      "aac": "/utc_minus_04_caribbean.aac"
+    },
+    {
+      "id": "11",
+      "label": "UTC−03:00 Argentina / Brazil",
+      "mp3": "/utc_minus_03_brazil_argentina.mp3",
+      "aac": "/utc_minus_03_brazil_argentina.aac"
+    },
+    {
+      "id": "12",
+      "label": "UTC−02:00 South Georgia",
+      "mp3": "/utc_minus_02_south_georgia.mp3",
+      "aac": "/utc_minus_02_south_georgia.aac"
+    },
+    {
+      "id": "13",
+      "label": "UTC−01:00 Portugal",
+      "mp3": "/utc_minus_01_portugal.mp3",
+      "aac": "/utc_minus_01_portugal.aac"
+    },
+    {
+      "id": "14",
+      "label": "UTC±00:00 United Kingdom",
+      "mp3": "/utc_00_uk.mp3",
+      "aac": "/utc_00_uk.aac"
+    },
+    {
+      "id": "15",
+      "label": "UTC+01:00 Central Europe / West Africa",
+      "mp3": "/utc_plus_01_europe.mp3",
+      "aac": "/utc_plus_01_europe.aac"
+    },
+    {
+      "id": "16",
+      "label": "UTC+02:00 Eastern Europe / Central Africa",
+      "mp3": "/utc_plus_02_europe_east.mp3",
+      "aac": "/utc_plus_02_europe_east.aac"
+    },
+    {
+      "id": "17",
+      "label": "UTC+03:00 East Africa / Middle East",
+      "mp3": "/utc_plus_03_middleeast.mp3",
+      "aac": "/utc_plus_03_middleeast.aac"
+    },
+    {
+      "id": "18",
+      "label": "UTC+04:00 Gulf",
+      "mp3": "/utc_plus_04_gulf.mp3",
+      "aac": "/utc_plus_04_gulf.aac"
+    },
+    {
+      "id": "19",
+      "label": "UTC+05:00 Central Asia / India",
+      "mp3": "/utc_plus_05_india.mp3",
+      "aac": "/utc_plus_05_india.aac"
+    },
+    {
+      "id": "20",
+      "label": "UTC+06:00 Central Asia / Bangladesh",
+      "mp3": "/utc_plus_06_bangladesh.mp3",
+      "aac": "/utc_plus_06_bangladesh.aac"
+    },
+    {
+      "id": "21",
+      "label": "UTC+07:00 Indochina / Western Indonesia",
+      "mp3": "/utc_plus_07_indonesia.mp3",
+      "aac": "/utc_plus_07_indonesia.aac"
+    },
+    {
+      "id": "22",
+      "label": "UTC+08:00 China / Singapore / WA",
+      "mp3": "/utc_plus_08_china.mp3",
+      "aac": "/utc_plus_08_china.aac"
+    },
+    {
+      "id": "23",
+      "label": "UTC+09:00 Japan / Korea / SA & NT",
+      "mp3": "/utc_plus_09_japan_korea.mp3",
+      "aac": "/utc_plus_09_japan_korea.aac"
+    }
+  ]
+}
