@@ -238,4 +238,4 @@ echo "✅ INSTALL COMPLETE"
 echo "👉 Run: /root/start.sh"
 echo ""
 echo "Streams will be available at:"
-jq -r '.streams[] | "  MP3: http://YOUR_IP:8000" + .mp3 + "\n  AAC: http://YOUR_IP:8000" + .aac' ./timezones.json 2>/dev/null || true
+jq -r '.streams[] | "  MP3: http://109.235.69.240:8000" + .mp3 + "\n  AAC: http://109.235.69.240:8000" + .aac' ./timezones.json 2>/dev/null || true
