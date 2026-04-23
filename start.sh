@@ -3,21 +3,19 @@
 echo "🚀 Starting system..."
 
 systemctl restart icecast2
-
 bash /root/generate_delays.sh
 
 pkill liquidsoap 2>/dev/null || true
+pkill ffmpeg 2>/dev/null || true
+
 sleep 2
 
-# recording process
-nohup liquidsoap /root/record.liq > /root/record.log 2>&1 &
-
-# streaming process
+nohup bash /root/record.sh > /root/record.log 2>&1 &
 nohup liquidsoap /root/delay_48.liq > /root/liquid.log 2>&1 &
 
-sleep 2
+sleep 3
 
-ps aux | grep liquidsoap | grep -v grep
+ps aux | grep -E "liquidsoap|ffmpeg" | grep -v grep
 
 echo "✅ Running"
 echo "🌐 http://$(curl -s ifconfig.me):8000"
