@@ -1,20 +1,30 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Installing 48-Stream Radio Delay System..."
+echo "🚀 Installing 48-Stream Radio Delay System (JSON Powered)..."
 
+# =========================
+# INSTALL DEPENDENCIES
+# =========================
 apt update -y
-apt install -y icecast2 liquidsoap ffmpeg curl nano
+apt install -y icecast2 liquidsoap ffmpeg curl nano jq
+
+# =========================
+# CHECK JSON FILE
+# =========================
+JSON_FILE="./timezones.json"
+
+if [ ! -f "$JSON_FILE" ]; then
+  echo "❌ timezones.json not found in current directory"
+  exit 1
+fi
 
 # =========================
 # ICECAST CONFIG
 # =========================
 ICECONF="/etc/icecast2/icecast.xml"
 
-# set source password
 sed -i 's|<source-password>.*</source-password>|<source-password>hackme</source-password>|g' $ICECONF
-
-# increase limits
 sed -i 's|<sources>.*</sources>|<sources>100</sources>|g' $ICECONF
 sed -i 's|<clients>.*</clients>|<clients>1000</clients>|g' $ICECONF
 
@@ -27,16 +37,17 @@ systemctl restart icecast2
 mkdir -p /root/recordings
 
 # =========================
-# GENERATE 24 BUFFER FILES
+# GENERATE BUFFER FILES
 # =========================
 echo "🎧 Generating buffer..."
+
 for i in $(seq -w 0 23); do
   ffmpeg -loglevel quiet -f lavfi -i "sine=frequency=1000:duration=30" \
   -q:a 9 -acodec libmp3lame /root/recordings/$i.mp3
 done
 
 # =========================
-# DELAY GENERATOR
+# DELAY GENERATOR SCRIPT
 # =========================
 cat > /root/generate_delays.sh <<'EOF'
 #!/bin/bash
@@ -60,13 +71,13 @@ chmod +x /root/generate_delays.sh
 bash /root/generate_delays.sh
 
 # =========================
-# LIQUIDSOAP CONFIG
+# LIQUIDSOAP BASE CONFIG
 # =========================
 cat > /root/delay_48.liq <<'EOF'
 settings.init.allow_root.set(true)
 settings.log.level.set(3)
 
-# SOURCE (fallback live stream)
+# SOURCE STREAM
 source = input.http("https://a11.asurahosting.com:8970/radio.mp3")
 
 def make_stream(i) =
@@ -79,36 +90,47 @@ def make_stream(i) =
     request.create(get_file())
   end
 
-  # IMPORTANT: make infallible
   mksafe(fallback([request.dynamic(get_req), source]))
 end
 EOF
 
-# append streams dynamically
-for i in $(seq -w 0 23); do
+# =========================
+# GENERATE STREAMS FROM JSON
+# =========================
+echo "⚙️ Generating streams from JSON..."
+
+COUNT=$(jq '.streams | length' $JSON_FILE)
+
+for ((i=0; i<$COUNT; i++)); do
+
+  id=$(jq -r ".streams[$i].id" $JSON_FILE)
+  mp3=$(jq -r ".streams[$i].mp3" $JSON_FILE)
+  aac=$(jq -r ".streams[$i].aac" $JSON_FILE)
+
 cat >> /root/delay_48.liq <<EOF
 
-s$i = make_stream("$i")
+s$id = make_stream("$id")
 
 # MP3
 output.icecast(%mp3(bitrate=96),
   host="localhost", port=8000, password="hackme",
-  mount="zeebrahradio-$i.mp3",
-  s$i)
+  mount="${mp3#/}",
+  s$id)
 
-# AAC (via ffmpeg)
+# AAC
 output.icecast(%ffmpeg(format="adts", %audio(codec="aac", b="64k")),
   host="localhost", port=8000, password="hackme",
-  mount="zeebrahradio-$i.aac",
-  s$i)
+  mount="${aac#/}",
+  s$id)
 
 EOF
+
 done
 
 # =========================
-# CRON (update every minute)
+# CRON JOB
 # =========================
 (crontab -l 2>/dev/null; echo "* * * * * /root/generate_delays.sh") | crontab -
 
 echo "✅ INSTALL COMPLETE"
-echo "👉 Run ./start.sh to start system"
+echo "👉 Next step: create start.sh and run it"
