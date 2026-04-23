@@ -3,9 +3,15 @@ set -e
 
 echo "🚀 Installing Production Radio Delay System..."
 
+# =========================
+# INSTALL DEPENDENCIES
+# =========================
 apt update -y
 apt install -y icecast2 liquidsoap ffmpeg curl nano jq
 
+# =========================
+# CHECK JSON
+# =========================
 JSON_FILE="./timezones.json"
 
 if [ ! -f "$JSON_FILE" ]; then
@@ -31,7 +37,7 @@ systemctl restart icecast2
 mkdir -p /root/recordings
 
 # =========================
-# DELAY MAPPER
+# DELAY GENERATOR
 # =========================
 cat > /root/generate_delays.sh <<'EOF'
 #!/bin/bash
@@ -54,16 +60,14 @@ chmod +x /root/generate_delays.sh
 bash /root/generate_delays.sh
 
 # =========================
-# LIQUIDSOAP CONFIG
+# RECORDING CONFIG
 # =========================
-cat > /root/delay_48.liq <<'EOF'
+cat > /root/record.liq <<'EOF'
 settings.init.allow_root.set(true)
 settings.log.level.set(3)
 
-# LIVE SOURCE
 live = input.http("https://a11.asurahosting.com:8970/radio.mp3")
 
-# RECORDING
 output.file(
   %mp3(bitrate=64),
   "/root/recordings/%Y-%m-%d_%H.mp3",
@@ -71,8 +75,17 @@ output.file(
   reopen_when={true},
   live
 )
+EOF
 
-# STREAM BUILDER
+# =========================
+# STREAM CONFIG
+# =========================
+cat > /root/delay_48.liq <<'EOF'
+settings.init.allow_root.set(true)
+settings.log.level.set(3)
+
+live = input.http("https://a11.asurahosting.com:8970/radio.mp3")
+
 def make_stream(i) =
   def get_file() =
     f = file.read("/root/current_" ^ i ^ ".txt")
@@ -83,17 +96,15 @@ def make_stream(i) =
     request.create(get_file())
   end
 
-  s = fallback(track_sensitive=false, [
+  mksafe(fallback(track_sensitive=false, [
     request.dynamic(get_req),
     live
-  ])
-
-  mksafe(s)
+  ]))
 end
 EOF
 
 # =========================
-# GENERATE STREAM OUTPUTS
+# ADD STREAMS FROM JSON
 # =========================
 COUNT=$(jq '.streams | length' $JSON_FILE)
 
@@ -107,18 +118,20 @@ cat >> /root/delay_48.liq <<EOF
 
 s$id = make_stream("$id")
 
-# MP3 (optimized)
+# MP3
 output.icecast(%mp3(bitrate=48),
-  host="localhost", port=8000, password="hackme",
+  host="localhost",
+  port=8000,
+  password="hackme",
   mount="${mp3#/}",
-  buffer=2.0,
   s$id)
 
-# AAC (optimized)
+# AAC
 output.icecast(%ffmpeg(format="adts", %audio(codec="aac", b="32k")),
-  host="localhost", port=8000, password="hackme",
+  host="localhost",
+  port=8000,
+  password="hackme",
   mount="${aac#/}",
-  buffer=2.0,
   s$id)
 
 EOF
@@ -132,10 +145,8 @@ done
 # update delay every minute
 (crontab -l 2>/dev/null; echo "* * * * * /root/generate_delays.sh") | crontab -
 
-# delete files older than 24h
+# delete old recordings (24h)
 (crontab -l 2>/dev/null; echo "5 * * * * find /root/recordings -type f -mmin +1440 -delete") | crontab -
 
-# watchdog (restart if crashed)
-(crontab -l 2>/dev/null; echo "*/5 * * * * pgrep liquidsoap > /dev/null || bash /root/start.sh") | crontab -
-
 echo "✅ INSTALL COMPLETE"
+echo "👉 Run start.sh"
