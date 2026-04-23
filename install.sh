@@ -50,19 +50,19 @@ with open(path, 'r') as f:
     content = f.read()
 
 # Update source-password
-content = re.sub(r'(<source-password>)[^<]*(</source-password>)', f'\\1{password}\\2', content, count=1)
-content = re.sub(r'(<relay-password>)[^<]*(</relay-password>)', f'\\1{password}\\2', content, count=1)
-content = re.sub(r'(<admin-password>)[^<]*(</admin-password>)', f'\\1{password}\\2', content, count=1)
+content = re.sub(r'(<source-password>)[^<]*(</source-password>)', f'\\g<1>{password}\\g<2>', content, count=1)
+content = re.sub(r'(<relay-password>)[^<]*(</relay-password>)', f'\\g<1>{password}\\g<2>', content, count=1)
+content = re.sub(r'(<admin-password>)[^<]*(</admin-password>)', f'\\g<1>{password}\\g<2>', content, count=1)
 
 # Set limits
-content = re.sub(r'(<sources>)[^<]*(</sources>)', r'\1200\2', content, count=1)
-content = re.sub(r'(<clients>)[^<]*(</clients>)', r'\12000\2', content, count=1)
+content = re.sub(r'(<sources>)[^<]*(</sources>)', r'\g<1>200\g<2>', content, count=1)
+content = re.sub(r'(<clients>)[^<]*(</clients>)', r'\g<1>2000\g<2>', content, count=1)
 
 # Set bind address
 if '<bind-address>' not in content:
     content = content.replace('<listen-socket>', f'<listen-socket>\n    <bind-address>{bind_addr}</bind-address>', 1)
 else:
-    content = re.sub(r'(<bind-address>)[^<]*(</bind-address>)', f'\\1{bind_addr}\\2', content, count=1)
+    content = re.sub(r'(<bind-address>)[^<]*(</bind-address>)', f'\\g<1>{bind_addr}\\g<2>', content, count=1)
 
 with open(path, 'w') as f:
     f.write(content)
