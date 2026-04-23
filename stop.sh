@@ -2,7 +2,7 @@
 
 echo "🛑 Stopping system..."
 
-pkill liquidsoap 2>/dev/null || true
+pkill liquidsoap
 systemctl stop icecast2
 
 echo "✅ Stopped"
