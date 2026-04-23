@@ -64,16 +64,27 @@ bash /root/generate_delays.sh
 # =========================
 cat > /root/record.liq <<'EOF'
 settings.init.allow_root.set(true)
-settings.log.level.set(3)
+settings.log.level.set(4)
 
-live = input.http("https://a11.asurahosting.com:8970/radio.mp3")
+live = input.http(
+  "https://a11.asurahosting.com:8970/radio.mp3",
+  timeout=10.,
+  buffer=5.,
+  user_agent="Mozilla/5.0"
+)
+
+# FORCE continuous stream handling
+live = mksafe(live)
+
+# IMPORTANT: add blank fallback to trigger output
+radio = fallback([live, blank()])
 
 output.file(
   %mp3(bitrate=64),
   "/root/recordings/%Y-%m-%d_%H.mp3",
   fallible=false,
   reopen_when={true},
-  live
+  radio
 )
 EOF
 
