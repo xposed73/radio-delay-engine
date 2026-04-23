@@ -1,8 +1,8 @@
 #!/bin/bash
 
-echo "🛑 Stopping Radio System..."
+echo "🛑 Stopping system..."
 
 pkill liquidsoap 2>/dev/null || true
 systemctl stop icecast2
 
-echo "✅ System Stopped"
+echo "✅ Stopped"
