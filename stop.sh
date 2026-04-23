@@ -1,9 +1,5 @@
 #!/bin/bash
-
-echo "🛑 Stopping system..."
-
-pkill liquidsoap
-pkill ffmpeg
-systemctl stop icecast2
-
-echo "✅ Stopped"
+echo "🛑 Stopping Radio Delay System..."
+systemctl stop radio-liquidsoap
+systemctl stop radio-recorder
+echo "✅ System stopped."

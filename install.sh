@@ -1,41 +1,71 @@
 #!/bin/bash
 set -e
-echo "🚀 Installing Production Radio Delay System..."
+
+# =========================
+# CONFIGURATION
+# =========================
+APP_DIR="/opt/radio-delay"
+CONFIG_FILE="./config.env"
+TIMEZONES_FILE="./timezones.json"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}🚀 Installing Radio Delay System...${NC}"
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+  echo -e "${RED}❌ Please run as root (sudo bash install.sh)${NC}"
+  exit 1
+fi
+
+# Load configuration if exists
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+else
+    echo -e "${RED}❌ config.env missing in current directory.${NC}"
+    exit 1
+fi
 
 # =========================
 # INSTALL DEPENDENCIES
 # =========================
+echo -e "${BLUE}📦 Installing dependencies...${NC}"
 apt update -y
-apt install -y icecast2 liquidsoap ffmpeg curl nano jq
+apt install -y icecast2 liquidsoap ffmpeg curl jq python3
 
 # =========================
 # ICECAST CONFIG
 # =========================
+echo -e "${BLUE}⚙️ Configuring Icecast...${NC}"
 ICECONF="/etc/icecast2/icecast.xml"
 
-# Use a Python one-liner for safe single-occurrence XML edits
-python3 - "$ICECONF" <<'PYEOF'
+python3 - "$ICECONF" "$ICECAST_PASSWORD" "$ICECAST_BIND_ADDRESS" <<'PYEOF'
 import sys, re
-
-path = sys.argv[1]
+path, password, bind_addr = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(path, 'r') as f:
     content = f.read()
 
-# Replace source-password only inside <authentication> block
-content = re.sub(r'(<source-password>)[^<]*(</source-password>)', r'\1hackme\2', content, count=1)
+# Update source-password
+content = re.sub(r'(<source-password>)[^<]*(</source-password>)', f'\\1{password}\\2', content, count=1)
+content = re.sub(r'(<relay-password>)[^<]*(</relay-password>)', f'\\1{password}\\2', content, count=1)
+content = re.sub(r'(<admin-password>)[^<]*(</admin-password>)', f'\\1{password}\\2', content, count=1)
 
-# Set limits — these live in <limits>
+# Set limits
 content = re.sub(r'(<sources>)[^<]*(</sources>)', r'\1200\2', content, count=1)
 content = re.sub(r'(<clients>)[^<]*(</clients>)', r'\12000\2', content, count=1)
 
-# Ensure bind-address 0.0.0.0 inside listen-socket (only if not already present)
+# Set bind address
 if '<bind-address>' not in content:
-    content = content.replace('<listen-socket>', '<listen-socket>\n    <bind-address>0.0.0.0</bind-address>', 1)
+    content = content.replace('<listen-socket>', f'<listen-socket>\n    <bind-address>{bind_addr}</bind-address>', 1)
+else:
+    content = re.sub(r'(<bind-address>)[^<]*(</bind-address>)', f'\\1{bind_addr}\\2', content, count=1)
 
 with open(path, 'w') as f:
     f.write(content)
-
-print("Icecast config updated.")
 PYEOF
 
 systemctl enable icecast2
@@ -44,88 +74,82 @@ systemctl restart icecast2
 # =========================
 # DIRECTORIES
 # =========================
-mkdir -p /root/recordings
+echo -e "${BLUE}📁 Creating directories...${NC}"
+mkdir -p "$APP_DIR"
+mkdir -p "$RECORDINGS_DIR"
+mkdir -p "$MAP_DIR"
+cp "$CONFIG_FILE" "$APP_DIR/config.env"
+cp "$TIMEZONES_FILE" "$APP_DIR/timezones.json"
 
 # =========================
-# RECORDING SCRIPT (FFMPEG)
+# RECORDING SCRIPT
 # =========================
-cat > /root/record.sh <<'EOF'
+cat > "$APP_DIR/record.sh" <<EOF
 #!/bin/bash
-mkdir -p /root/recordings
+source "$APP_DIR/config.env"
+mkdir -p "\$RECORDINGS_DIR"
+echo "Starting ffmpeg recording from \$SOURCE_URL"
 while true; do
-  ffmpeg -loglevel error \
-    -user_agent "Mozilla/5.0" \
-    -i "https://a11.asurahosting.com:8970/radio.mp3" \
-    -acodec libmp3lame -ab 64k \
-    -f segment \
-    -segment_time 3600 \
-    -segment_atclocktime 1 \
-    -reset_timestamps 1 \
-    -strftime 1 \
-    "/root/recordings/%Y-%m-%d_%H.mp3"
-  sleep 2
+  ffmpeg -loglevel error \\
+    -user_agent "Mozilla/5.0" \\
+    -i "\$SOURCE_URL" \\
+    -acodec libmp3lame -ab 64k \\
+    -f segment \\
+    -segment_time \$SEGMENT_TIME \\
+    -segment_atclocktime 1 \\
+    -reset_timestamps 1 \\
+    -strftime 1 \\
+    "\$RECORDINGS_DIR/%Y-%m-%d_%H.mp3"
+  sleep 5
 done
 EOF
-chmod +x /root/record.sh
+chmod +x "$APP_DIR/record.sh"
 
 # =========================
 # DELAY GENERATOR
 # =========================
-# FIX: use plain integers (no zero-padding) to match JSON stream IDs
-# FIX: generate one file per delay hour, named current_0.txt .. current_23.txt
-cat > /root/generate_delays.sh <<'EOF'
+cat > "$APP_DIR/generate_delays.sh" <<EOF
 #!/bin/bash
-DIR="/root/recordings"
+source "$APP_DIR/config.env"
+DIR="\$RECORDINGS_DIR"
 
 # Find the most recent recording as fallback
-LATEST=$(ls -t "$DIR"/*.mp3 2>/dev/null | head -n1)
-if [ -z "$LATEST" ]; then
-  LATEST=""
-fi
+LATEST=\$(ls -t "\$DIR"/*.mp3 2>/dev/null | head -n1)
 
-for i in $(seq 0 23); do
-  TARGET=$(date -d "$i hour ago" +"%Y-%m-%d_%H")
-  FILE="$DIR/$TARGET.mp3"
-  if [ -f "$FILE" ]; then
-    echo "$FILE" > /root/current_${i}.txt
-  elif [ -n "$LATEST" ]; then
-    echo "$LATEST" > /root/current_${i}.txt
+for i in \$(seq 0 23); do
+  # Format with zero padding to match JSON IDs (00, 01, ...)
+  ID=\$(printf "%02d" \$i)
+  TARGET=\$(date -d "\$i hour ago" +"%Y-%m-%d_%H")
+  FILE="\$DIR/\$TARGET.mp3"
+  
+  if [ -f "\$FILE" ]; then
+    echo "\$FILE" > "\$MAP_DIR/current_\${ID}.txt"
+  elif [ -n "\$LATEST" ]; then
+    echo "\$LATEST" > "\$MAP_DIR/current_\${ID}.txt"
   else
-    # No recordings at all yet — write empty so Liquidsoap falls back to live
-    echo "" > /root/current_${i}.txt
+    echo "" > "\$MAP_DIR/current_\${ID}.txt"
   fi
 done
 EOF
-chmod +x /root/generate_delays.sh
-bash /root/generate_delays.sh
+chmod +x "$APP_DIR/generate_delays.sh"
+bash "$APP_DIR/generate_delays.sh"
 
 # =========================
 # LIQUIDSOAP BASE CONFIG
-# FIX: use file.contents (not file.read) for string result
-# FIX: use request.dynamic.list for a looping single-file source
-# FIX: define live once with buffer, reuse across all streams
-# FIX: truncate file first (>) then append (>>) per stream
 # =========================
-cat > /root/delay_48.liq <<'EOF'
+cat > "$APP_DIR/delay_engine.liq" <<EOF
 settings.init.allow_root.set(true)
 settings.log.level.set(3)
 
-# Live source — defined once, buffered for stability
-live_raw = input.http(
-  "https://a11.asurahosting.com:8970/radio.mp3",
-  timeout=10.
-)
-live = buffer(buffer=5., max=10., live_raw)
+source_url = "$SOURCE_URL"
 
-# Silence fallback
+# Live source
+live_raw = input.http(source_url, timeout=10.)
+live = buffer(buffer=5., max=10., live_raw)
 silence = blank()
 
-# Build a delayed stream for delay index i (string, e.g. "0", "3", "12")
 def make_stream(i) =
-  txt_path = "/root/current_" ^ i ^ ".txt"
-
-  # request.dynamic.list: called each time a new track is needed
-  # Returns a list with one request pointing to the current file
+  txt_path = "${MAP_DIR}/current_" ^ i ^ ".txt"
   def get_request() =
     raw = file.contents(txt_path)
     path = string.trim(raw)
@@ -135,107 +159,80 @@ def make_stream(i) =
       []
     end
   end
-
-  file_source = request.dynamic.list(
-    conservative=true,
-    get_request
-  )
-
-  # Fallback chain: delayed file → live → silence
-  fallback(
-    track_sensitive=false,
-    [file_source, live, silence]
-  )
+  file_source = request.dynamic.list(conservative=true, get_request)
+  fallback(track_sensitive=false, [file_source, live, silence])
 end
 EOF
 
-# =========================
-# GENERATE STREAMS FROM JSON
-# =========================
-JSON_FILE="./timezones.json"
-if [ ! -f "$JSON_FILE" ]; then
-  echo "❌ timezones.json missing"
-  exit 1
-fi
-
-COUNT=$(jq '.streams | length' "$JSON_FILE")
-
+# Append streams from JSON
+COUNT=$(jq '.streams | length' "$TIMEZONES_FILE")
 for ((i=0; i<COUNT; i++)); do
-  id=$(jq -r ".streams[$i].id" "$JSON_FILE")
-  mp3=$(jq -r ".streams[$i].mp3" "$JSON_FILE")
-  aac=$(jq -r ".streams[$i].aac" "$JSON_FILE")
-
-  # Strip leading slash from mount names
+  id=$(jq -r ".streams[$i].id" "$TIMEZONES_FILE")
+  mp3=$(jq -r ".streams[$i].mp3" "$TIMEZONES_FILE")
+  aac=$(jq -r ".streams[$i].aac" "$TIMEZONES_FILE")
   mp3_mount="${mp3#/}"
   aac_mount="${aac#/}"
 
-  # FIX: id must match current_N.txt numbering — ensure JSON id is plain integer
-  cat >> /root/delay_48.liq <<EOF
+  cat >> "$APP_DIR/delay_engine.liq" <<EOF
 
 # --- Stream ID: $id ---
 s${id} = make_stream("${id}")
-
-output.icecast(%mp3(bitrate=48),
-  host="127.0.0.1",
-  port=8000,
-  password="hackme",
-  mount="${mp3_mount}",
-  s${id})
-
-output.icecast(%ffmpeg(format="adts", %audio(codec="aac", b="32k")),
-  host="127.0.0.1",
-  port=8000,
-  password="hackme",
-  mount="${aac_mount}",
-  s${id})
+output.icecast(%mp3(bitrate=48), host="127.0.0.1", port=$ICECAST_PORT, password="$ICECAST_PASSWORD", mount="${mp3_mount}", s${id})
+output.icecast(%ffmpeg(format="adts", %audio(codec="aac", b="32k")), host="127.0.0.1", port=$ICECAST_PORT, password="$ICECAST_PASSWORD", mount="${aac_mount}", s${id})
 EOF
 done
 
 # =========================
-# START SCRIPT
-# FIX: the install said "Run ./start.sh" but never created it
+# SYSTEMD UNITS
 # =========================
-cat > /root/start.sh <<'EOF'
-#!/bin/bash
-set -e
-echo "▶ Starting recorder..."
-nohup /root/record.sh > /var/log/radio_record.log 2>&1 &
-echo $! > /tmp/record.pid
+echo -e "${BLUE}🛡️ Setting up systemd services...${NC}"
 
-echo "▶ Starting Liquidsoap..."
-nohup liquidsoap /root/delay_48.liq > /var/log/liquidsoap.log 2>&1 &
-echo $! > /tmp/liquidsoap.pid
+cat > /etc/systemd/system/radio-recorder.service <<EOF
+[Unit]
+Description=Radio Delay Recorder
+After=network.target
 
-echo "✅ All services started."
-echo "   Recorder PID : $(cat /tmp/record.pid)"
-echo "   Liquidsoap PID: $(cat /tmp/liquidsoap.pid)"
-echo "   Logs: /var/log/radio_record.log  /var/log/liquidsoap.log"
+[Service]
+ExecStart=$APP_DIR/record.sh
+Restart=always
+User=root
+WorkingDirectory=$APP_DIR
+
+[Install]
+WantedBy=multi-user.target
 EOF
-chmod +x /root/start.sh
 
-# Create a stop script too
-cat > /root/stop.sh <<'EOF'
-#!/bin/bash
-echo "⏹ Stopping services..."
-[ -f /tmp/liquidsoap.pid ] && kill "$(cat /tmp/liquidsoap.pid)" 2>/dev/null && rm /tmp/liquidsoap.pid && echo "  Liquidsoap stopped."
-[ -f /tmp/record.pid ]     && kill "$(cat /tmp/record.pid)"     2>/dev/null && rm /tmp/record.pid     && echo "  Recorder stopped."
-echo "Done."
+cat > /etc/systemd/system/radio-liquidsoap.service <<EOF
+[Unit]
+Description=Radio Delay Liquidsoap Engine
+After=network.target icecast2.service
+
+[Service]
+ExecStart=/usr/bin/liquidsoap $APP_DIR/delay_engine.liq
+Restart=always
+User=root
+WorkingDirectory=$APP_DIR
+
+[Install]
+WantedBy=multi-user.target
 EOF
-chmod +x /root/stop.sh
+
+systemctl daemon-reload
+systemctl enable radio-recorder
+systemctl enable radio-liquidsoap
 
 # =========================
 # CRON JOBS
-# FIX: avoid duplicate cron entries on re-run
 # =========================
-crontab -l 2>/dev/null | grep -v 'generate_delays\|radio_cleanup' | {
+echo -e "${BLUE}⏰ Setting up cron jobs...${NC}"
+(crontab -l 2>/dev/null | grep -v 'generate_delays\|radio-delay') || true | {
   cat
-  echo "* * * * * /root/generate_delays.sh >> /var/log/generate_delays.log 2>&1"
-  echo "5 * * * * find /root/recordings -type f -mmin +1440 -delete"
+  echo "* * * * * $APP_DIR/generate_delays.sh > /dev/null 2>&1"
+  echo "5 * * * * find $RECORDINGS_DIR -type f -mmin +$RETENTION_MINS -delete"
 } | crontab -
 
-echo ""
-echo "✅ INSTALL COMPLETE"
-echo "👉 Run: /root/start.sh"
-echo ""
-echo "Streams will be available at:"
-jq -r '.streams[] | "  MP3: http://109.235.69.240:8000" + .mp3 + "\n  AAC: http://109.235.69.240:8000" + .aac' ./timezones.json 2>/dev/null || true
+echo -e "\n${GREEN}✅ INSTALL COMPLETE${NC}"
+echo -e "👉 Start services: ${BLUE}systemctl start radio-recorder radio-liquidsoap${NC}"
+echo -e "👉 Check logs:    ${BLUE}journalctl -u radio-liquidsoap -f${NC}"
+echo -e "👉 Icecast Admin: ${BLUE}http://$(curl -s ifconfig.me):$ICECAST_PORT${NC}"
+
