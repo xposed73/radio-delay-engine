@@ -1,21 +1,15 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Installing REAL 24h Delay Radio System..."
+echo "🚀 Installing Production Radio Delay System..."
 
-# =========================
-# INSTALL DEPENDENCIES
-# =========================
 apt update -y
 apt install -y icecast2 liquidsoap ffmpeg curl nano jq
 
-# =========================
-# CHECK JSON FILE
-# =========================
 JSON_FILE="./timezones.json"
 
 if [ ! -f "$JSON_FILE" ]; then
-  echo "❌ timezones.json not found"
+  echo "❌ timezones.json missing"
   exit 1
 fi
 
@@ -25,8 +19,8 @@ fi
 ICECONF="/etc/icecast2/icecast.xml"
 
 sed -i 's|<source-password>.*</source-password>|<source-password>hackme</source-password>|g' $ICECONF
-sed -i 's|<sources>.*</sources>|<sources>100</sources>|g' $ICECONF
-sed -i 's|<clients>.*</clients>|<clients>1000</clients>|g' $ICECONF
+sed -i 's|<sources>.*</sources>|<sources>200</sources>|g' $ICECONF
+sed -i 's|<clients>.*</clients>|<clients>2000</clients>|g' $ICECONF
 
 systemctl enable icecast2
 systemctl restart icecast2
@@ -37,7 +31,7 @@ systemctl restart icecast2
 mkdir -p /root/recordings
 
 # =========================
-# DELAY GENERATOR (REAL)
+# DELAY MAPPER
 # =========================
 cat > /root/generate_delays.sh <<'EOF'
 #!/bin/bash
@@ -45,7 +39,6 @@ cat > /root/generate_delays.sh <<'EOF'
 DIR="/root/recordings"
 
 for i in $(seq -w 0 23); do
-
   TARGET=$(date -d "$i hour ago" +"%Y-%m-%d_%H")
   FILE="$DIR/$TARGET.mp3"
 
@@ -54,7 +47,6 @@ for i in $(seq -w 0 23); do
   else
     echo "" > /root/current_$i.txt
   fi
-
 done
 EOF
 
@@ -62,31 +54,25 @@ chmod +x /root/generate_delays.sh
 bash /root/generate_delays.sh
 
 # =========================
-# LIQUIDSOAP CONFIG (REAL)
+# LIQUIDSOAP CONFIG
 # =========================
 cat > /root/delay_48.liq <<'EOF'
 settings.init.allow_root.set(true)
 settings.log.level.set(3)
 
-# =========================
 # LIVE SOURCE
-# =========================
 live = input.http("https://a11.asurahosting.com:8970/radio.mp3")
 
-# =========================
-# RECORD LIVE STREAM (HOURLY)
-# =========================
+# RECORDING
 output.file(
-  %mp3(bitrate=96),
+  %mp3(bitrate=64),
   "/root/recordings/%Y-%m-%d_%H.mp3",
   fallible=false,
   reopen_when={true},
   live
 )
 
-# =========================
-# DELAY FUNCTION
-# =========================
+# STREAM BUILDER
 def make_stream(i) =
   def get_file() =
     f = file.read("/root/current_" ^ i ^ ".txt")
@@ -97,15 +83,18 @@ def make_stream(i) =
     request.create(get_file())
   end
 
-  mksafe(fallback([request.dynamic(get_req), live]))
+  s = fallback(track_sensitive=false, [
+    request.dynamic(get_req),
+    live
+  ])
+
+  mksafe(s)
 end
 EOF
 
 # =========================
-# GENERATE STREAMS FROM JSON
+# GENERATE STREAM OUTPUTS
 # =========================
-echo "⚙️ Generating streams..."
-
 COUNT=$(jq '.streams | length' $JSON_FILE)
 
 for ((i=0; i<$COUNT; i++)); do
@@ -118,16 +107,18 @@ cat >> /root/delay_48.liq <<EOF
 
 s$id = make_stream("$id")
 
-# MP3
-output.icecast(%mp3(bitrate=96),
+# MP3 (optimized)
+output.icecast(%mp3(bitrate=48),
   host="localhost", port=8000, password="hackme",
   mount="${mp3#/}",
+  buffer=2.0,
   s$id)
 
-# AAC
-output.icecast(%ffmpeg(format="adts", %audio(codec="aac", b="64k")),
+# AAC (optimized)
+output.icecast(%ffmpeg(format="adts", %audio(codec="aac", b="32k")),
   host="localhost", port=8000, password="hackme",
   mount="${aac#/}",
+  buffer=2.0,
   s$id)
 
 EOF
@@ -138,11 +129,13 @@ done
 # CRON JOBS
 # =========================
 
-# update delay mapping every minute
+# update delay every minute
 (crontab -l 2>/dev/null; echo "* * * * * /root/generate_delays.sh") | crontab -
 
-# delete files older than 24 hours
+# delete files older than 24h
 (crontab -l 2>/dev/null; echo "5 * * * * find /root/recordings -type f -mmin +1440 -delete") | crontab -
 
+# watchdog (restart if crashed)
+(crontab -l 2>/dev/null; echo "*/5 * * * * pgrep liquidsoap > /dev/null || bash /root/start.sh") | crontab -
+
 echo "✅ INSTALL COMPLETE"
-echo "👉 Create start.sh and run it"
