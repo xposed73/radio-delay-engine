@@ -159,7 +159,7 @@ def make_stream(i) =
       []
     end
   end
-  file_source = request.dynamic.list(conservative=true, get_request)
+  file_source = request.dynamic.list(get_request)
   fallback(track_sensitive=false, [file_source, live, silence])
 end
 EOF
@@ -170,15 +170,15 @@ for ((i=0; i<COUNT; i++)); do
   id=$(jq -r ".streams[$i].id" "$TIMEZONES_FILE")
   mp3=$(jq -r ".streams[$i].mp3" "$TIMEZONES_FILE")
   aac=$(jq -r ".streams[$i].aac" "$TIMEZONES_FILE")
-  mp3_mount="${mp3#/}"
-  aac_mount="${aac#/}"
+  mp3_mount="${mp3}"
+  aac_mount="${aac}"
 
   cat >> "$APP_DIR/delay_engine.liq" <<EOF
 
 # --- Stream ID: $id ---
 s${id} = make_stream("${id}")
-output.icecast(%mp3(bitrate=48), host="127.0.0.1", port=$ICECAST_PORT, password="$ICECAST_PASSWORD", mount="${mp3_mount}", s${id})
-output.icecast(%ffmpeg(format="adts", %audio(codec="aac", b="32k")), host="127.0.0.1", port=$ICECAST_PORT, password="$ICECAST_PASSWORD", mount="${aac_mount}", s${id})
+output.icecast(%mp3(bitrate=48), host="localhost", port=$ICECAST_PORT, password="$ICECAST_PASSWORD", mount="${mp3_mount}", s${id})
+output.icecast(%ffmpeg(format="adts", %audio(codec="aac", b="32k")), host="localhost", port=$ICECAST_PORT, password="$ICECAST_PASSWORD", mount="${aac_mount}", s${id})
 EOF
 done
 
