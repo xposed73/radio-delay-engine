@@ -110,23 +110,31 @@ chmod +x "$APP_DIR/record.sh"
 # =========================
 cat > "$APP_DIR/generate_delays.sh" <<EOF
 #!/bin/bash
+# Load config to get paths
 source "$APP_DIR/config.env"
 DIR="\$RECORDINGS_DIR"
 
-# Find the most recent recording as fallback
+# Ensure map directory exists
+mkdir -p "\$MAP_DIR"
+
+# Find the most recent recording as a last-resort fallback
 LATEST=\$(ls -t "\$DIR"/*.mp3 2>/dev/null | head -n1)
 
 for i in \$(seq 0 23); do
-  # Format with zero padding to match JSON IDs (00, 01, ...)
+  # ID is zero-padded (00, 01, ..., 23) to match timezones.json
   ID=\$(printf "%02d" \$i)
+  
+  # Calculate target hour (e.g., "2026-04-24_15")
   TARGET=\$(date -d "\$i hour ago" +"%Y-%m-%d_%H")
   FILE="\$DIR/\$TARGET.mp3"
   
   if [ -f "\$FILE" ]; then
     echo "\$FILE" > "\$MAP_DIR/current_\${ID}.txt"
   elif [ -n "\$LATEST" ]; then
+    # If specific hour missing, use latest (causes duplicate stream but better than silence)
     echo "\$LATEST" > "\$MAP_DIR/current_\${ID}.txt"
   else
+    # No recordings found at all
     echo "" > "\$MAP_DIR/current_\${ID}.txt"
   fi
 done

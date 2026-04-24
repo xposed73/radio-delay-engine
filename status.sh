@@ -31,13 +31,21 @@ fi
 
 echo "--------------------------------"
 echo -e "${BLUE}📂 Storage Status${NC}"
-DU=$(du -sh /opt/radio-delay/recordings 2>/dev/null | cut -f1)
-COUNT=$(ls /opt/radio-delay/recordings/*.mp3 2>/dev/null | wc -l)
+source /opt/radio-delay/config.env 2>/dev/null
+DU=$(du -sh "$RECORDINGS_DIR" 2>/dev/null | cut -f1)
+COUNT=$(ls "$RECORDINGS_DIR"/*.mp3 2>/dev/null | wc -l)
 echo "Recordings:    $COUNT files ($DU)"
+
+echo "--------------------------------"
+echo -e "${BLUE}🗺️ Mapping Status (Last 5)${NC}"
+ls -rt "$MAP_DIR"/current_*.txt 2>/dev/null | tail -n 5 | while read f; do
+    name=$(basename "$f")
+    val=$(cat "$f")
+    echo "$name -> $val"
+done
 
 echo "--------------------------------"
 echo -e "${BLUE}🌐 Network (Public URLS)${NC}"
 IP=$(curl -s ifconfig.me)
-source /opt/radio-delay/config.env 2>/dev/null
 echo "Icecast Admin: http://$IP:$ICECAST_PORT"
 echo "Check logs with: journalctl -u radio-liquidsoap -n 50 --no-pager"
