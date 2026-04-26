@@ -80,6 +80,8 @@ mkdir -p "$RECORDINGS_DIR"
 mkdir -p "$MAP_DIR"
 cp "$CONFIG_FILE" "$APP_DIR/config.env"
 cp "$TIMEZONES_FILE" "$APP_DIR/timezones.json"
+cp "./repair.sh" "$APP_DIR/repair.sh"
+chmod +x "$APP_DIR/repair.sh"
 
 # =========================
 # RECORDING SCRIPT
