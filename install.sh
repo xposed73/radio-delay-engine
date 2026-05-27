@@ -230,6 +230,8 @@ EOF
 systemctl daemon-reload
 systemctl enable radio-recorder
 systemctl enable radio-liquidsoap
+echo -e "${BLUE}🔄 Restarting services to apply new configurations...${NC}"
+systemctl restart radio-recorder radio-liquidsoap
 
 # =========================
 # CRON JOBS
