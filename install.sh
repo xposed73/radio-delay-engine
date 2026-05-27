@@ -95,7 +95,7 @@ while true; do
   ffmpeg -loglevel error \\
     -user_agent "Mozilla/5.0" \\
     -i "\$SOURCE_URL" \\
-    -acodec libmp3lame -ab 64k \\
+    -acodec libmp3lame -ab "\$RECORD_BITRATE" \\
     -f segment \\
     -segment_time \$SEGMENT_TIME \\
     -segment_atclocktime 1 \\
@@ -187,8 +187,8 @@ for ((i=0; i<COUNT; i++)); do
 
 # --- Stream ID: $id ---
 s${id} = make_stream("${id}")
-output.icecast(%mp3(bitrate=48), host="localhost", port=$ICECAST_PORT, password="$ICECAST_PASSWORD", mount="${mp3_mount}", s${id})
-output.icecast(%ffmpeg(format="adts", %audio(codec="aac", b="32k")), host="localhost", port=$ICECAST_PORT, password="$ICECAST_PASSWORD", mount="${aac_mount}", s${id})
+output.icecast(%mp3(bitrate=$OUT_MP3_BITRATE), host="localhost", port=$ICECAST_PORT, password="$ICECAST_PASSWORD", mount="${mp3_mount}", s${id})
+output.icecast(%ffmpeg(format="adts", %audio(codec="aac", b="$OUT_AAC_BITRATE")), host="localhost", port=$ICECAST_PORT, password="$ICECAST_PASSWORD", mount="${aac_mount}", s${id})
 EOF
 done
 
