@@ -94,6 +94,10 @@ echo "Starting ffmpeg recording from \$SOURCE_URL"
 while true; do
   ffmpeg -loglevel error \\
     -user_agent "Mozilla/5.0" \\
+    -reconnect 1 \\
+    -reconnect_at_eof 1 \\
+    -reconnect_streamed 1 \\
+    -reconnect_delay_max 5 \\
     -i "\$SOURCE_URL" \\
     -acodec libmp3lame -ab "\$RECORD_BITRATE" \\
     -f segment \\
@@ -126,6 +130,12 @@ for i in \$(seq 0 23); do
   # ID is zero-padded (00, 01, ..., 23) to match timezones.json
   ID=\$(printf "%02d" \$i)
   
+  if [ "\$i" -eq 0 ]; then
+    # 0-hour delay is the live stream, don't read files (bypass to avoid playing growing files)
+    echo "" > "\$MAP_DIR/current_\${ID}.txt"
+    continue
+  fi
+  
   # Calculate target hour (e.g., "2026-04-24_15")
   TARGET=\$(date -d "\$i hour ago" +"%Y-%m-%d_%H")
   FILE="\$DIR/\$TARGET.mp3"
@@ -156,21 +166,41 @@ source_url = "$SOURCE_URL"
 # Live source
 live_raw = input.http(source_url, timeout=10.)
 live = buffer(buffer=5., max=10., live_raw)
-silence = blank()
 
 def make_stream(i) =
-  txt_path = "${MAP_DIR}/current_" ^ i ^ ".txt"
+  delay_hours = int_of_string(i)
+  
   def get_request() =
-    raw = file.contents(txt_path)
-    path = string.trim(raw)
-    if path != "" and file.exists(path) then
-      [request.create(path)]
-    else
+    if delay_hours == 0 then
+      # 0-hour delay is live stream directly; no files
       []
+    else
+      # Calculate expected path dynamically using date command
+      hour_str = string.trim(process.read("date -d '" ^ i ^ " hour ago' +%Y-%m-%d_%H"))
+      expected_path = "${RECORDINGS_DIR}/" ^ hour_str ^ ".mp3"
+      
+      if file.exists(expected_path) then
+        [request.create(expected_path)]
+      else
+        # Fallback to the mapping file if the specific hour is missing
+        txt_path = "${MAP_DIR}/current_" ^ i ^ ".txt"
+        if file.exists(txt_path) then
+          raw = file.contents(txt_path)
+          path = string.trim(raw)
+          if path != "" and file.exists(path) then
+            [request.create(path)]
+          else
+            []
+          end
+        else
+          []
+        end
+      end
     end
   end
+  
   file_source = request.dynamic.list(get_request)
-  fallback(track_sensitive=false, [file_source, live, silence])
+  fallback(track_sensitive=false, [file_source, buffer(live), blank()])
 end
 EOF
 
@@ -186,7 +216,7 @@ for ((i=0; i<COUNT; i++)); do
   cat >> "$APP_DIR/delay_engine.liq" <<EOF
 
 # --- Stream ID: $id ---
-s${id} = make_stream("${id}")
+s${id} = clock(make_stream("${id}"))
 output.icecast(%mp3(bitrate=$OUT_MP3_BITRATE), host="localhost", port=$ICECAST_PORT, password="$ICECAST_PASSWORD", mount="${mp3_mount}", s${id})
 output.icecast(%ffmpeg(format="adts", %audio(codec="aac", b="$OUT_AAC_BITRATE")), host="localhost", port=$ICECAST_PORT, password="$ICECAST_PASSWORD", mount="${aac_mount}", s${id})
 EOF
