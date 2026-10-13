@@ -15,12 +15,13 @@ if [ "$confirm" != "YES" ]; then
 fi
 
 echo "⏹ Stopping and disabling services..."
-systemctl stop radio-liquidsoap radio-recorder 2>/dev/null || true
-systemctl disable radio-liquidsoap radio-recorder 2>/dev/null || true
+systemctl stop radio-liquidsoap radio-recorder radio-metadata 2>/dev/null || true
+systemctl disable radio-liquidsoap radio-recorder radio-metadata 2>/dev/null || true
 
 echo "🗑 Removing systemd units..."
 rm -f /etc/systemd/system/radio-liquidsoap.service
 rm -f /etc/systemd/system/radio-recorder.service
+rm -f /etc/systemd/system/radio-metadata.service
 systemctl daemon-reload
 
 echo "🗑 Removing cron jobs..."

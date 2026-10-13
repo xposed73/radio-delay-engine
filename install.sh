@@ -82,6 +82,10 @@ cp "$CONFIG_FILE" "$APP_DIR/config.env"
 cp "$TIMEZONES_FILE" "$APP_DIR/timezones.json"
 cp "./repair.sh" "$APP_DIR/repair.sh"
 chmod +x "$APP_DIR/repair.sh"
+if [ -f "./sync_metadata.py" ]; then
+  cp "./sync_metadata.py" "$APP_DIR/sync_metadata.py"
+  chmod +x "$APP_DIR/sync_metadata.py"
+fi
 
 # =========================
 # RECORDING SCRIPT
@@ -257,24 +261,40 @@ WorkingDirectory=$APP_DIR
 WantedBy=multi-user.target
 EOF
 
+cat > /etc/systemd/system/radio-metadata.service <<EOF
+[Unit]
+Description=Radio Delay Metadata Synchronizer
+After=network.target icecast2.service
+
+[Service]
+ExecStart=/usr/bin/python3 $APP_DIR/sync_metadata.py
+Restart=always
+User=root
+WorkingDirectory=$APP_DIR
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 systemctl daemon-reload
 systemctl enable radio-recorder
 systemctl enable radio-liquidsoap
+systemctl enable radio-metadata
 echo -e "${BLUE}🔄 Restarting services to apply new configurations...${NC}"
-systemctl restart radio-recorder radio-liquidsoap
+systemctl restart radio-recorder radio-liquidsoap radio-metadata
 
 # =========================
 # CRON JOBS
 # =========================
 echo -e "${BLUE}⏰ Setting up cron jobs...${NC}"
-(crontab -l 2>/dev/null | grep -v 'generate_delays\|radio-delay') || true | {
-  cat
+{
+  crontab -l 2>/dev/null | grep -v 'generate_delays\|radio-delay' || true
   echo "* * * * * $APP_DIR/generate_delays.sh > /dev/null 2>&1"
   echo "5 * * * * find $RECORDINGS_DIR -type f -mmin +$RETENTION_MINS -delete"
 } | crontab -
 
 echo -e "\n${GREEN}✅ INSTALL COMPLETE${NC}"
-echo -e "👉 Start services: ${BLUE}systemctl start radio-recorder radio-liquidsoap${NC}"
+echo -e "👉 Start services: ${BLUE}systemctl start radio-recorder radio-liquidsoap radio-metadata${NC}"
 echo -e "👉 Check logs:    ${BLUE}journalctl -u radio-liquidsoap -f${NC}"
 echo -e "👉 Icecast Admin: ${BLUE}http://$(curl -s ifconfig.me):$ICECAST_PORT${NC}"
 

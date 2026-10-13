@@ -29,6 +29,13 @@ else
     echo -e "Liquidsoap:    ${RED}STOPPED${NC}"
 fi
 
+# Check Metadata Syncer
+if systemctl is-active --quiet radio-metadata; then
+    echo -e "Metadata Sync: ${GREEN}RUNNING${NC}"
+else
+    echo -e "Metadata Sync: ${RED}STOPPED${NC}"
+fi
+
 echo "--------------------------------"
 echo -e "${BLUE}📂 Storage Status${NC}"
 source /opt/radio-delay/config.env 2>/dev/null
